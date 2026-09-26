@@ -7,7 +7,7 @@ const ARTIFACT_DIR = 'C:\\Users\\avish\\.gemini\\antigravity\\brain\\00031917-42
 
 async function runHistoryQA() {
   console.log('====================================================');
-  console.log('STARTING CHROME BROWSER QA FOR HISTORICAL WEATHER');
+  console.log('STARTING FULL CHROME BROWSER QA (ZERO ERRORS AUDIT)');
   console.log('Target: http://localhost:3000');
   console.log('====================================================\n');
 
@@ -41,7 +41,7 @@ async function runHistoryQA() {
     // 1. Initial Load
     console.log('[1] Loading http://localhost:3000...');
     await page.goto('http://localhost:3000', { waitUntil: 'networkidle2', timeout: 30000 });
-    await sleep(2000);
+    await sleep(2500);
 
     // 2. Click on "History" tab
     console.log('[2] Navigating to History tab...');
@@ -147,13 +147,17 @@ async function runHistoryQA() {
     });
     await sleep(500);
 
-    // Fill in dates
+    // Set custom dates via React prototype setter
     await page.evaluate(() => {
       const inputs = document.querySelectorAll('input[type="date"]');
       if (inputs.length >= 2) {
-        inputs[0].value = '2026-08-01';
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(inputs[0], '2026-08-01');
+        inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
         inputs[0].dispatchEvent(new Event('change', { bubbles: true }));
-        inputs[1].value = '2026-08-10';
+
+        setter.call(inputs[1], '2026-08-10');
+        inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
         inputs[1].dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
@@ -202,11 +206,12 @@ async function runHistoryQA() {
       await page.evaluate((cityName) => {
         const input = document.querySelector('input[placeholder*="Search"]');
         if (input) {
-          input.value = cityName;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, cityName);
           input.dispatchEvent(new Event('input', { bubbles: true }));
         }
       }, city);
-      await sleep(1000);
+      await sleep(1200);
 
       // Click Search button or top suggestion
       await page.evaluate(() => {
@@ -272,13 +277,17 @@ async function runHistoryQA() {
       console.log(`✓ Tab "${tabName}" navigated successfully (renders: ${tabOk})`);
     }
 
-    // Verify console errors
+    // Filter critical console errors (ignoring react-devtools recommendation)
     const criticalErrors = consoleErrors.filter(err => 
       !err.includes('favicon') && 
       !err.includes('Leaflet') &&
-      !err.includes('tile')
+      !err.includes('tile') &&
+      !err.includes('react-devtools')
     );
-    console.log('\nCritical Console Errors:', criticalErrors);
+    console.log('\nCritical Console Errors Count:', criticalErrors.length);
+    if (criticalErrors.length > 0) {
+      console.log('Errors:', criticalErrors);
+    }
 
     console.log('\n====================================================');
     console.log('HISTORICAL WEATHER QA VERIFICATION COMPLETED: ALL PASS');

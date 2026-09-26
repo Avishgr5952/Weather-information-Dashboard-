@@ -1,6 +1,10 @@
 // Open-Meteo Historical Weather Service with Primary & Fallback Endpoints, Caching, and Retries
 
+const isLocalhost = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
 const FORECAST_BASE_URL = 'https://api.open-meteo.com/v1/forecast';
+const ARCHIVE_PROXY_URL = isLocalhost ? '/archive-proxy/v1/archive' : null;
 const ARCHIVE_BASE_URL = 'https://archive-api.open-meteo.com/v1/archive';
 const REQUEST_TIMEOUT_MS = 10000;
 
@@ -142,8 +146,11 @@ export async function fetchHistoricalWeather(latitude, longitude, startDate, end
   // archive-api.open-meteo.com/v1/archive is an alternative for older periods if reachable.
   const endpoints = [
     `${FORECAST_BASE_URL}?${queryString}`,
-    `${ARCHIVE_BASE_URL}?${queryString}`
   ];
+  if (ARCHIVE_PROXY_URL) {
+    endpoints.push(`${ARCHIVE_PROXY_URL}?${queryString}`);
+  }
+  endpoints.push(`${ARCHIVE_BASE_URL}?${queryString}`);
 
   let rawData = null;
   let lastError = null;

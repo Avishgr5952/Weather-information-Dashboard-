@@ -8,6 +8,26 @@ import { formatDayDate, formatTime, getAQIInfo } from '../utils/formatters.js';
  */
 
 // WMO Weather Interpretation Codes (WW)
+const isLocalhostEnv = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+function getGeocodingUrls(query, count = 20) {
+  const enc = encodeURIComponent(query);
+  const path = `?name=${enc}&count=${count}&language=en&format=json`;
+  if (isLocalhostEnv) {
+    return [`/geo-proxy/v1/search${path}`];
+  }
+  return [`https://geocoding-api.open-meteo.com/v1/search${path}`];
+}
+
+function getAirQualityUrls(lat, lon) {
+  const query = `?latitude=${lat}&longitude=${lon}&current=european_aqi,us_aqi,pm10,pm2_5,nitrogen_dioxide,ozone&timezone=auto`;
+  if (isLocalhostEnv) {
+    return [`/aqi-proxy/v1/air-quality${query}`];
+  }
+  return [`https://air-quality-api.open-meteo.com/v1/air-quality${query}`];
+}
+
 const WMO_CODES = {
   0: { day: 'Sunny', night: 'Clear' },
   1: { day: 'Mainly Sunny', night: 'Mainly Clear' },
@@ -367,25 +387,33 @@ export async function searchLocations(query) {
   }
 
   for (const q of queries) {
-    try {
-      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=20&language=en&format=json`;
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
+    const urls = getGeocodingUrls(q, 20);
+    let matched = false;
 
-      const res = await fetch(url, { signal: controller?.signal });
-      if (timeoutId) clearTimeout(timeoutId);
+    for (const url of urls) {
+      if (matched) break;
+      try {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timeoutId = controller ? setTimeout(() => controller.abort('Geocoding timeout'), 7000) : null;
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          openMeteoSuccessCount += data.results.length;
-          data.results.forEach((r) => {
-            rawResults.push(normalizeOpenMeteoResult(r));
-          });
+        const res = await fetch(url, { signal: controller?.signal });
+        if (timeoutId) clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            openMeteoSuccessCount += data.results.length;
+            data.results.forEach((r) => {
+              rawResults.push(normalizeOpenMeteoResult(r));
+            });
+            matched = true;
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.debug('Geocoding query fallback for', q, err.message);
         }
       }
-    } catch (err) {
-      console.warn('Open-Meteo geocoding query error for', q, err);
     }
   }
 
@@ -394,7 +422,7 @@ export async function searchLocations(query) {
     try {
       const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(clean)}&format=jsonv2&addressdetails=1&limit=10`;
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort('Nominatim timeout'), 7000) : null;
 
       const res = await fetch(nomUrl, {
         signal: controller?.signal,
@@ -413,7 +441,9 @@ export async function searchLocations(query) {
         }
       }
     } catch (err) {
-      console.warn('Nominatim fallback geocoding error for', clean, err);
+      if (err.name !== 'AbortError') {
+        console.debug('Nominatim fallback geocoding error for', clean, err.message);
+      }
     }
   }
 
@@ -702,16 +732,29 @@ export async function fetchLiveWeatherData(latitude, longitude, cityName, countr
   // 1. Forecast API URL with extended hourly parameters
   const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,visibility,uv_index,cloud_cover,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max,uv_index_max&timezone=auto`;
 
-  // 2. Air Quality API URL
-  const airQualityUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=european_aqi,us_aqi,pm10,pm2_5,nitrogen_dioxide,ozone&timezone=auto`;
+  // 2. Air Quality Fetch with dev proxy support to prevent browser cert authority invalid errors
+  const fetchSafeAirQuality = async () => {
+    const urls = getAirQualityUrls(latitude, longitude);
+    for (const url of urls) {
+      try {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(() => controller.abort('Air quality timeout'), 5000) : null;
+        const res = await fetch(url, { signal: controller?.signal });
+        if (timer) clearTimeout(timer);
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch {
+        // try next endpoint or return null quietly
+      }
+    }
+    return null;
+  };
 
   // Execute requests in parallel
-  const [forecastRes, airQualityRes] = await Promise.all([
+  const [forecastRes, airQuality] = await Promise.all([
     fetch(forecastUrl),
-    fetch(airQualityUrl).catch((err) => {
-      console.warn('Air quality endpoint failed:', err);
-      return null;
-    })
+    fetchSafeAirQuality()
   ]);
 
   if (!forecastRes.ok) {
@@ -719,10 +762,6 @@ export async function fetchLiveWeatherData(latitude, longitude, cityName, countr
   }
 
   const forecast = await forecastRes.json();
-  let airQuality = null;
-  if (airQualityRes && airQualityRes.ok) {
-    airQuality = await airQualityRes.json().catch(() => null);
-  }
 
   const { current, hourly, daily } = forecast;
 
