@@ -502,31 +502,31 @@ The exact port may change if the configured port is unavailable.
 
 ### Dashboard
 
-![Weather Dashboard](screenshots/dashboard.png)
+![Weather Dashboard](screenshot/dashboard.png)
 
 ### Location Search
 
-![Location Search](screenshots/search.png)
+![Location Search](screenshot/search.png)
 
 ### Historical Weather
 
-![Historical Weather](screenshots/history.png)
+![Historical Weather](screenshot/history.png)
 
 ### Air Quality
 
-![Air Quality](screenshots/air-quality.png)
+![Air Quality](screenshot/air-quality.png)
 
 ### Weather Map
 
-![Weather Map](screenshots/weather-map.png)
+![Weather Map](screenshot/weather-map.png)
 
 ### City Comparison
 
-![City Comparison](screenshots/city-comparison.png)
+![City Comparison](screenshot/city-comparison.png)
 
 ### Weather Report
 
-![Weather Report](screenshots/report.png)
+![Weather Report](screenshot/report.png)
 
 ---
 
