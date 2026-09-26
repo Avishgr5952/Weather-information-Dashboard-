@@ -1,3 +1,4 @@
+ HEAD
 # Weather Information Dashboard (BCA Final-Year Project)
 
 A modern, responsive, production-quality Meteorological Information Dashboard built with React, Vite, Tailwind CSS, and Lucide React.
@@ -126,3 +127,7 @@ To connect a live API (such as OpenWeatherMap or Open-Meteo):
 1. Add your API key in `.env`: `VITE_WEATHER_API_KEY=your_key`
 2. In `src/services/weatherService.js`, set `USE_REAL_API = true`.
 3. The UI components will consume the data automatically without any modifications!
+=======
+# Weather-information-Dashboard-
+React-based Weather Dashboard with forecasts, historical weather, AQI, interactive maps, city comparison, analytics, and PDF reports.
+>>>>>>> 36cde6a4858ad81ec2017f641ce6fb49b85ebb65
